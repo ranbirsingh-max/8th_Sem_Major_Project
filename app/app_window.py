@@ -3,7 +3,6 @@ import requests
 import json
 import base64
 import io
-
 from PIL import Image
 import numpy as np
 from PyQt5 import QtGui
@@ -15,14 +14,12 @@ from PyQt5.QtWidgets import (
     QMainWindow,
     QPushButton,
     QListView,
-    QBoxLayout,
+    QMessageBox,
 )
-from PyQt5.QtWidgets import QMessageBox, QListWidget, QLabel, QLineEdit
 
 from new_case import NewCase
 from train_model import train
 from match_faces import match
-
 
 class AppWindow(QMainWindow):
     def __init__(self, user):
@@ -31,6 +28,8 @@ class AppWindow(QMainWindow):
         self.width = 800
         self.height = 600
         self.user = user
+
+        self.current_list_widget = None  # Track the current list widget
 
         self.initialize()
 
@@ -65,7 +64,14 @@ class AppWindow(QMainWindow):
 
         self.show()
 
+    def clear_previous_list(self):
+        if self.current_list_widget is not None:
+            self.current_list_widget.setParent(None)
+            self.current_list_widget.deleteLater()
+            self.current_list_widget = None
+
     def new_case(self):
+        self.clear_previous_list()
         self.new_case = NewCase(self.user)
 
     def refresh_model(self):
@@ -76,6 +82,7 @@ class AppWindow(QMainWindow):
             QMessageBox.about(self, "Error", output["message"])
 
     def match_from_submitted(self):
+        self.clear_previous_list()
         output = match()
         if output["status"]:
             result = output["result"]
@@ -84,6 +91,7 @@ class AppWindow(QMainWindow):
             QMessageBox.about(self, "Error", output["message"])
 
     def view_confirmed_cases(self):
+        self.clear_previous_list()
         URL = "http://localhost:8000/get_confirmed_cases?submitted_by=" + self.user
         try:
             cases = json.loads(requests.get(URL).text)
@@ -97,6 +105,7 @@ class AppWindow(QMainWindow):
             QMessageBox.about(self, "Something went wrong", str(e))
 
     def view_submitted_cases(self):
+        self.clear_previous_list()
         URL = "http://localhost:8000/get_submitted_cases?submitted_by=" + self.user
         try:
             cases = json.loads(requests.get(URL).text)
@@ -110,6 +119,7 @@ class AppWindow(QMainWindow):
             QMessageBox.about(self, "Something went wrong", str(e))
 
     def view_submitted_cases_ui(self, result):
+        self.clear_previous_list()
         list_ = QListView(self)
         list_.setIconSize(QSize(96, 96))
         list_.setMinimumSize(400, 380)
@@ -128,30 +138,27 @@ class AppWindow(QMainWindow):
                 + "\n Mobile: "
                 + str(case_detail[5])
                 + "\n Status: "
-                + list(
-                    map(
-                        lambda x: "Not Found" if x == "NF" else "Found",
-                        [case_detail[10]],
-                    )
-                )[0]
+                + ("Not Found" if case_detail[10] == "NF" else "Found")
                 + "\n Submission Date: "
                 + case_detail[8]
             )
-            image = QtGui.QImage(
+            qimage = QtGui.QImage(
                 image,
                 image.shape[1],
                 image.shape[0],
                 image.shape[1] * 3,
                 QtGui.QImage.Format_RGB888,
             )
-            icon = QPixmap(image)
+            icon = QPixmap(qimage)
             item.setIcon(QIcon(icon))
             model.appendRow(item)
 
         list_.setModel(model)
         list_.show()
+        self.current_list_widget = list_
 
     def view_cases(self, result):
+        self.clear_previous_list()
         list_ = QListView(self)
         list_.setIconSize(QSize(96, 96))
         list_.setMinimumSize(400, 380)
@@ -166,40 +173,38 @@ class AppWindow(QMainWindow):
                 f"http://localhost:8000/change_found_status?case_id='{case_id}'"
             )
             case_details = self.get_details(case_id, "case")
-            if case_details and len(case_details) > 0 and len(case_details[0]) > 2:
-                for submission_id in submission_list:
-                    submission_details = self.get_details(
-                        submission_id, "public_submission"
-                    )
-                    image = self.decode_base64(case_details[0][2])
+            for submission_id in submission_list:
+                submission_details = self.get_details(
+                    submission_id, "public_submission"
+                )
+                image = self.decode_base64(case_details[0][2])
 
-                    item = QStandardItem(
-                        " Name: "
-                        + case_details[0][0]
-                        + "\n Father's Name: "
-                        + case_details[0][1]
-                        + "\n Age: "
-                        + str(case_details[0][4])
-                        + "\n Mobile: "
-                        + str(case_details[0][3])
-                        + "\n Location: "
-                        + submission_details[0][0]
-                    )
-                    image = QtGui.QImage(
-                        image,
-                        image.shape[1],
-                        image.shape[0],
-                        image.shape[1] * 3,
-                        QtGui.QImage.Format_RGB888,
-                    )
-                    icon = QPixmap(image)
-                    item.setIcon(QIcon(icon))
-                    model.appendRow(item)
-            else:
-                QMessageBox.about(self, "Error", "Invalid case details received.")
+                item = QStandardItem(
+                    " Name: "
+                    + case_details[0][0]
+                    + "\n Father's Name: "
+                    + case_details[0][1]
+                    + "\n Age: "
+                    + str(case_details[0][4])
+                    + "\n Mobile: "
+                    + str(case_details[0][3])
+                    + "\n Location: "
+                    + submission_details[0][0]
+                )
+                qimage = QtGui.QImage(
+                    image,
+                    image.shape[1],
+                    image.shape[0],
+                    image.shape[1] * 3,
+                    QtGui.QImage.Format_RGB888,
+                )
+                icon = QPixmap(qimage)
+                item.setIcon(QIcon(icon))
+                model.appendRow(item)
 
         list_.setModel(model)
         list_.show()
+        self.current_list_widget = list_
 
     def get_details(self, case_id: str, type: str):
         if type == "public_submission":
@@ -211,7 +216,7 @@ class AppWindow(QMainWindow):
             if result.status_code == 200:
                 return json.loads(result.text)
             else:
-                pass
+                return []
         except Exception as e:
             raise e
 
@@ -222,9 +227,7 @@ class AppWindow(QMainWindow):
         img = np.array(Image.open(io.BytesIO(base64.b64decode(img))))
         return img
 
-
 if __name__ == "__main__":
-
     app = QApplication(sys.argv)
     w = AppWindow("gagan")
     sys.exit(app.exec())

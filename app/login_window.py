@@ -1,124 +1,143 @@
 import sys
-import requests
 import json
-
-from PyQt5 import QtGui
-from PyQt5.QtCore import Qt, QSize
-from PyQt5.QtGui import QPixmap, QIcon
-from PyQt5.QtGui import QStandardItemModel, QStandardItem
-from PyQt5.QtWidgets import QApplication, QMainWindow, QPushButton, QListView
-from PyQt5.QtWidgets import QMessageBox, QListWidget, QLabel, QLineEdit
-
-from app_window import AppWindow
+import requests
+from PyQt5.QtWidgets import (
+    QApplication, QMainWindow, QWidget, QVBoxLayout, QLineEdit,
+    QLabel, QPushButton, QMessageBox, QFrame
+)
+from PyQt5.QtGui import QFont, QIcon, QPixmap
+from PyQt5.QtCore import Qt
+from app_window import AppWindow  # Your app logic
 
 
 class LoginWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.title = "Login"
-        self.width = 800
-        self.height = 600
+        self.setWindowTitle("Secure Login")
+        self.setFixedSize(400, 520)
+        self.setWindowIcon(QIcon("profile.png"))  # Optional
+
         self.URL = "http://localhost:8000"
-        self.icon_path = "../resources/icon.png"
-        self.username = None
-        self.password = None
+        self.init_ui()
 
-        self.initialize()
+    def init_ui(self):
+        central_widget = QWidget()
+        self.setCentralWidget(central_widget)
+        layout = QVBoxLayout()
+        layout.setContentsMargins(40, 30, 40, 30)
+        layout.setSpacing(20)
 
-    def initialize(self):
-        self.setWindowIcon(QtGui.QIcon(self.icon_path))
-        self.setWindowTitle(self.title)
-        self.setFixedSize(self.width, self.height)
-        self.get_username()
-        self.get_password()
+        # Profile image
+        image_label = QLabel()
+        pixmap = QPixmap("profile.png").scaled(90, 90, Qt.KeepAspectRatio, Qt.SmoothTransformation)
+        image_label.setPixmap(pixmap)
+        image_label.setAlignment(Qt.AlignCenter)
+        layout.addWidget(image_label)
 
-        login_bt = QPushButton("Login", self)
-        login_bt.move(340, 250)
-        login_bt.clicked.connect(self.login)
+        # Title
+        title = QLabel("Welcome Back")
+        title.setFont(QFont("Segoe UI", 16, QFont.Bold))
+        title.setAlignment(Qt.AlignCenter)
+        layout.addWidget(title)
 
-        self.show()
+        # Frame around form
+        form_frame = QFrame()
+        form_layout = QVBoxLayout()
+        form_layout.setSpacing(15)
 
-    def get_username(self):
-        username_label = QLabel(self)
-        username_label.setText("Username: ")
-        username_label.move(310, 170)
+        # Username input
+        self.username_input = QLineEdit()
+        self.username_input.setPlaceholderText("Username")
+        self.username_input.setObjectName("inputField")
+        form_layout.addWidget(self.username_input)
 
-        self.username = QLineEdit(self)
-        self.username.move(370, 170)
+        # Password input
+        self.password_input = QLineEdit()
+        self.password_input.setEchoMode(QLineEdit.Password)
+        self.password_input.setPlaceholderText("Password")
+        self.password_input.setObjectName("inputField")
+        form_layout.addWidget(self.password_input)
 
-    def get_password(self):
-        password_label = QLabel(self)
-        password_label.setText("Password: ")
-        password_label.move(310, 200)
+        # Login button
+        login_button = QPushButton("LOGIN")
+        login_button.setObjectName("loginButton")
+        login_button.clicked.connect(self.handle_login)
+        form_layout.addWidget(login_button)
 
-        self.password = QLineEdit(self)
-        self.password.setEchoMode(QLineEdit.Password)
-        self.password.move(370, 200)
+        form_frame.setLayout(form_layout)
+        layout.addWidget(form_frame)
 
-    def login(self):
-        if not self.password.text() or not self.username.text():
-            QMessageBox.about(self, "Error", "\nPlease fill all entries\t\n")
-        else:
-            try:
-                login_status = requests.get(
-                    self.URL
-                    + "/login?username="
-                    + self.username.text()
-                    + "&password="
-                    + self.password.text()
-                )
-                login_status = json.loads(login_status.text)
-                if login_status.get("status", False):
-                    self.app_window = AppWindow(user=self.username.text())
-                else:
-                    QMessageBox.about(self, "Login Failed", "\nPlease try again\t\n")
-            except requests.exceptions.ConnectionError:
-                QMessageBox.about(
-                    self, "Conenction Error", "\nDatabase is not running\t\n"
-                )
+        central_widget.setLayout(layout)
+
+    def handle_login(self):
+        username = self.username_input.text().strip()
+        password = self.password_input.text().strip()
+
+        if not username or not password:
+            QMessageBox.warning(self, "Validation Error", "Please fill in all fields.")
+            return
+
+        try:
+            response = requests.get(f"{self.URL}/login?username={username}&password={password}")
+            data = json.loads(response.text)
+
+            if data.get("status", False):
+                self.app_window = AppWindow(user=username)
+                self.app_window.show()  # Show the app window
+                self.close()            # Close the login window
+            else:
+                QMessageBox.warning(self, "Login Failed", "Invalid credentials. Try again.")
+        except requests.exceptions.ConnectionError:
+            QMessageBox.critical(self, "Server Error", "Unable to connect to the server.")
 
 
-app = QApplication(sys.argv)
-style = """
-        QWidget{
-            background: #262D37;
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+
+    app.setStyleSheet("""
+        QWidget {
+            background-color: #1e1e2f;
+            color: #ffffff;
+            font-family: 'Segoe UI';
         }
-        QLabel{
-            color: #fff;
+
+        QLineEdit#inputField {
+            background-color: #2c2f3c;
+            border: 1px solid #3a3f52;
+            border-radius: 6px;
+            padding: 10px;
+            color: #ffffff;
+            font-size: 12pt;
         }
-        QListView
-        {
-            background: #7e959e;
+
+        QLineEdit#inputField:focus {
+            border: 1px solid #6272a4;
         }
-        QLabel#round_count_label, QLabel#highscore_count_label{
-            border: 1px solid #fff;
-            border-radius: 8px;
-            padding: 2px;
-        }
-        QPushButton
-        {
+
+        QPushButton#loginButton {
+            background-color: #6272a4;
+            border: none;
             color: white;
-            background: #0577a8;
-            border: 1px #DADADA solid;
-            padding: 5px 10px;
-            border-radius: 2px;
+            padding: 10px;
             font-weight: bold;
-            font-size: 9pt;
-            outline: none;
+            font-size: 12pt;
+            border-radius: 6px;
         }
-        QPushButton:hover{
-            border: 1px #C6C6C6 solid;
-            color: #fff;
-            background: #0892D0;
+
+        QPushButton#loginButton:hover {
+            background-color: #7085b4;
         }
-        QLineEdit {
-            padding: 1px;
-            color: #fff;
-            border-style: solid;
-            border: 2px solid #fff;
-            border-radius: 8px;
+
+        QLabel {
+            font-size: 13pt;
         }
-    """
-app.setStyleSheet(style)
-w = LoginWindow()
-sys.exit(app.exec())
+
+        QFrame {
+            background: transparent;
+        }
+    """)
+
+    window = LoginWindow()
+    window.show()  # Show the login window when the app starts
+
+    sys.exit(app.exec())
